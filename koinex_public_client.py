@@ -8,8 +8,8 @@ class KoinexPublicClient:
     def get_bid_ask(self, product):
         try:
             ob = self.get_product_order_book(product)
-            bid = float(ob["buy_orders"]["data"][0]["price_per_unit"])
-            ask = float(ob["sell_orders"]["data"][0]["price_per_unit"])
+            bid = float(ob["stats"][product]["highest_bid"])
+            ask = float(ob["stats"][product]["lowest_ask"])
 
             return (bid, ask)
         except:
@@ -17,13 +17,21 @@ class KoinexPublicClient:
 
     def get_product_order_book(self, product):
         try:
-            r = requests.get(self.url + "/api/dashboards/order_history?target_currency=" + product)
+            r = requests.get(self.url + "/api/ticker")
             return json.loads(r.text)
-        except:
+        except Exception as e:
+            print(e)
             return None
 
 
-
+    def get_symbol(self, symbol):
+        symbol = symbol.upper()
+        if(symbol == "BTCINR"):
+            return "BTC"
+        elif(symbol == "ETHINR"):
+            return "ETH"
+        elif(symbol == "LTCINR"):
+            return "LTC"
 
 
 

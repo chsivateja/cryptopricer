@@ -22,3 +22,9 @@ class ZebpayPublicClient:
             return json.loads(r.text)
         except:
             return None
+
+    def get_symbol(self, symbol):
+        part1 = symbol[:3]
+        part2 = symbol[3:]
+
+        return part1 + "/" + part2

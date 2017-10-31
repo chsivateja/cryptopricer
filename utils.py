@@ -19,7 +19,7 @@ class Utils:
 
     @staticmethod
     def ratio_interval_seconds():
-        return 5
+        return 60
 
     @staticmethod
     def arb_interval_seconds():
