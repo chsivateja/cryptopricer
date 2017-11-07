@@ -53,6 +53,21 @@ class BitfinexTradeClient:
             "X-BFX-PAYLOAD": data
         }
 
+    def account_info(self):
+        """
+        Fetch active Positions
+        """
+
+        payload = {
+            "request": "/v1/account_infos",
+            "nonce": self._nonce
+        }
+
+        signed_payload = self._sign_payload(payload)
+        r = requests.post(self.URL + "/account_infos", headers=signed_payload, verify=True)
+        json_resp = r.json()
+        return json_resp
+
     def place_order(self, amount, price, side, ord_type, is_postonly = True, symbol='btcusd', exchange='bitfinex'):
         """
         Submit a new order.
