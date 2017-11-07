@@ -16,7 +16,7 @@ class BitfinexWSReader:
         self.stopped = False
         self.channel_symbol = {}
 
-        LOGGER.info("Created Bitfinex web socket using websocket address "
+        print("Created Bitfinex web socket using websocket address "
                     + ws_address + " for symbols " + str(symbols))
 
 
@@ -67,7 +67,7 @@ class BitfinexWSReader:
                                          on_close=self.on_close)
         self.ws.on_open = self.on_open
 
-        LOGGER.info("Connecting to bitfinex websocket")
+        print("Connecting to bitfinex websocket")
 
         if (not auto_reconnect):
             self.ws.run_forever()
@@ -80,9 +80,3 @@ class BitfinexWSReader:
     def stop(self):
         self.stopped = True
         self.ws.close()
-
-if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-    w = WebSocketReader()
-    w.init(config.BITFINEX_WS_ADDRESS, ["BTCUSD","BTCEUR"], [])
-    w.start()

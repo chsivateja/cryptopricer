@@ -1,5 +1,8 @@
 from bitfinex_trade_client import BitfinexClient,BitfinexTradeClient
 import time
+from orderbook import OrderBook
+from bitfinex_md import MD
+from basic_types import BookSide
 
 KEY = "nBi8YyJZZ9ZhSOf2jEpMAoBpzKt2Shh6IoLdTjFRYvb"
 SECRET = "XO6FUYbhFYqBflXYSaKMiu1hGHLhGf63xsOK0Pf7osA"
@@ -63,6 +66,11 @@ class BitfinexTrader:
 
         self.run = True
 
+        self.orderbook = OrderBook(self.symbol)
+        self.md = MD({self.symbol:self.orderbook},[self])
+        self.md.connect("wss://api.bitfinex.com/ws")
+        self.last_update_time = 0
+
     def buy_sell_px(self):
         buy_px = round(self.ema.value * (1 - self.threshold / 100.0))
         sell_px = round(self.ema.value * (1 + self.threshold / 100.0))
@@ -113,59 +121,57 @@ class BitfinexTrader:
             if (not status["is_live"]):
                 self.sell_order = None
 
-    def trade(self):
-        while(self.run):
+    def start(self):
+        self.md.start()
 
-            ticker = None
+    def on_trade_update(self, symbol):
+        pass
 
-            try:
-                ticker = self.client.ticker(self.symbol)
-            except:
-                continue
+    def on_market_update(self, symbol):
 
-            print(ticker)
-            self.ema.update(ticker['mid'])
+        self.ema.update(self.orderbook.mid())
+
+        if((time.time() - self.last_update_time) > self.interval):
             self.update_order_status()
 
-            if(self.ema.ready()):
-                buy_px, sell_px = self.buy_sell_px()
-                bid = ticker['bid']
-                ask = ticker['ask']
+        if(self.ema.ready()):
+            buy_px, sell_px = self.buy_sell_px()
+            bid = self.orderbook.price(BookSide.BID)
+            ask = self.orderbook.price(BookSide.ASK)
 
-                print(str(buy_px) + "|" + str(sell_px) + " " + str(bid) + "|" + str(ask))
+            print(str(buy_px) + "|" + str(sell_px) + " " + str(bid) + "|" + str(ask))
 
-                if(self.can_buy(buy_px, bid)):
-                    if(self.buy_order == None):
-                        amount = self.amount - max(0, self.net_position())
-                        self.buy_order = Order(amount, bid, "buy", "exchange limit", self.symbol)
-                        print(self.buy_order)
-                        status = {} #self.trade_client.place_order(amount, bid, "buy", "exchange limit", True, self.symbol)
+            if(self.can_buy(buy_px, bid)):
+                if(self.buy_order == None):
+                    amount = self.amount - max(0, self.net_position())
+                    self.buy_order = Order(amount, bid, "buy", "exchange limit", self.symbol)
+                    print(self.buy_order)
+                    status = {} #self.trade_client.place_order(amount, bid, "buy", "exchange limit", True, self.symbol)
 
-                        if ("order_id" in status):
-                            self.buy_order.id = status["order_id"]
-                        else:
-                            self.buy_order = None
+                    if ("order_id" in status):
+                        self.buy_order.id = status["order_id"]
                     else:
-                        if(abs(self.buy_order.price - bid)/bid > self.threshold / 10.0 ):
-                            self.trade_client.delete_order(self.buy_order.id)
+                        self.buy_order = None
+                else:
+                    if(abs(self.buy_order.price - bid)/bid > self.threshold / 10.0 ):
+                        self.trade_client.delete_order(self.buy_order.id)
 
-                if (self.can_sell(sell_px, ask)):
-                    amount = self.net_position()
-                    if (self.sell_order == None):
-                        self.sell_order = Order(amount, ask, "sell", "exchange limit", self.symbol)
+            if (self.can_sell(sell_px, ask)):
+                amount = self.net_position()
+                if (self.sell_order == None):
+                    self.sell_order = Order(amount, ask, "sell", "exchange limit", self.symbol)
 
-                        print(self.sell_order)
+                    print(self.sell_order)
 
-                        status = {}#self.trade_client.place_order(amount, ask, "sell", "exchange limit", True, self.symbol)
+                    status = {}#self.trade_client.place_order(amount, ask, "sell", "exchange limit", True, self.symbol)
 
-                        if("order_id" in status):
-                            self.sell_order.id = status["order_id"]
-                        else:
-                            self.sell_order = None
-
+                    if("order_id" in status):
+                        self.sell_order.id = status["order_id"]
                     else:
-                        if (abs(self.sell_order.price - ask) / ask > self.threshold / 10.0 or self.sell_order.amount < amount):
-                            self.trade_client.delete_order(self.sell_order.id)
+                        self.sell_order = None
 
-            time.sleep(self.interval)
+                else:
+                    if (abs(self.sell_order.price - ask) / ask > self.threshold / 10.0 or self.sell_order.amount < amount):
+                        self.trade_client.delete_order(self.sell_order.id)
+
 

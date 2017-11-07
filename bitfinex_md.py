@@ -1,6 +1,5 @@
-import argparse
+
 import logging
-import sys
 
 from bitfinex_ws_reader import  BitfinexWSReader
 from basic_types import OrderSide, BookSide
@@ -90,7 +89,7 @@ class MD:
             for l in self.listeners:
                 l.on_market_update(symbol)
 
-            LOGGER.debug(book.orderbook.toString(5))
+            print(book.orderbook.toString(5))
 
     def __on_trades(self, channel_id, trades):
         channel, symbol = self.channel_to_symbol[channel_id]
@@ -126,10 +125,8 @@ class MD:
 
             book.on_trade(side, price, amount, timestamp)
 
-            sid = SecurityManager().get_id_by_exchange_symbol(MD.EXCHANGE, symbol)
-
             for l in self.listeners:
-                l.on_trade_update(sid)
+                l.on_trade_update(symbol)
 
 
 class MDBook:
@@ -167,30 +164,3 @@ class MDBook:
 
         LOGGER.debug(self.orderbook.toString(5))
 
-
-if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-    arg_parser = argparse.ArgumentParser(description = "Bitfinex Book Builder")
-
-    args = arg_parser.parse_args()
-
-    sm = SecurityManager()
-    sm.init(configs.config.SECURITY_INFO_FILE)
-    symbols = sm.get_ids_for_exchange(infra.metadata.markets.Exchange.BITFINEX)
-
-    md = MD(symbols)
-
-    # md.connect(ws_address = configs.config.BITFINEX_WS_ADDRESS)
-    #
-    # md.start()
-
-    ex_conf = {
-                "BITFINEX" : {
-                       "data_dir":"/Users/siddharth/PycharmProjects/bitbet/raw_data",
-                       "data_prefix": "bitfinex"
-                    }
-               }
-
-    rdr = RecordedDataReader().init(ex_conf, "20170612")
-    md.connect(mode="sim")
-    md.start()
