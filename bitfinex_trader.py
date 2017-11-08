@@ -41,7 +41,7 @@ class Order:
         return "Order => Amount:" + str(self.amount) + "|Price:" + str(self.price) + "|Side:" + str(self.side)
 
 class BitfinexTrader:
-    def __init__(self, symbol, koinex_symbol,  amount, interval, duration, threshold):
+    def __init__(self, key, secret, symbol, koinex_symbol,  amount, interval, duration, threshold):
         self.symbol = symbol
 
         self.sym1 = symbol[:3]
@@ -49,7 +49,7 @@ class BitfinexTrader:
 
         self.koinex_symbol = koinex_symbol
 
-        self.trade_client = BitfinexTradeClient(KEY,SECRET)
+        self.trade_client = BitfinexTradeClient(key, secret)
         self.client = BitfinexClient()
         self.koinex_client = KoinexPublicClient()
         self.currency_client = CurrencyConverter()
@@ -78,11 +78,11 @@ class BitfinexTrader:
         account_info = self.trade_client.account_info()
         return float(account_info[0]["maker_fees"])
 
-    def get_pnl(self):
+    def get_pnl(self, ticker):
         pos = max(self.buy_position, self.sell_position)
 
-        bid = self.orderbook.price(BookSide.BID)
-        ask = self.orderbook.price(BookSide.ASK)
+        bid = float(ticker['bid'])
+        ask = float(ticker['ask'])
 
         buy_avg_px = ((pos - self.buy_position) * ask + self.buy_position * self.buy_px) / pos
         sell_avg_px = ((pos - self.sell_position) * bid + self.sell_position * self.sell_px) / pos
@@ -115,10 +115,10 @@ class BitfinexTrader:
         return (buy_px, sell_px)
 
     def can_buy(self, buy_px, bid):
-        return (self.net_position() < self.amount)
+        return (buy_px >= bid and self.net_position() < self.amount)
 
     def can_sell(self, sell_px, ask):
-        return (self.net_position() > 0 and -self.net_position() < self.amount)
+        return (self.net_position() > 0)
 
     def net_position(self):
         return (self.buy_position - self.sell_position)
@@ -127,11 +127,10 @@ class BitfinexTrader:
         try:
             if(self.buy_order != None):
                 status = self.trade_client.status_order(self.buy_order.id)
-
                 print(status)
 
-                executed_amount = status["executed_amount"]
-                executed_px = status["avg_execution_price"]
+                executed_amount = float(status["executed_amount"])
+                executed_px = float(status["avg_execution_price"])
 
                 new_executed_amount = executed_amount - self.buy_order.traded_amount
 
@@ -141,7 +140,7 @@ class BitfinexTrader:
                     self.buy_order.traded_amount = executed_amount
                     self.buy_order.traded_px = executed_px
 
-                    self.buy_px = (self.buy_px * self.buy_position + new_executed_amount * new_executed_px)/(self.buy_position + new_executed_amount)
+                    self.buy_px = (self.buy_px * self.buy_position + new_executed_amount * new_executed_px) / (self.buy_position + new_executed_amount)
                     self.buy_position += new_executed_amount
 
                 if(not status["is_live"]):
@@ -149,11 +148,10 @@ class BitfinexTrader:
 
             if (self.sell_order != None):
                 status = self.trade_client.status_order(self.sell_order.id)
-
                 print(status)
 
-                executed_amount = status["executed_amount"]
-                executed_px = status["avg_execution_price"]
+                executed_amount = float(status["executed_amount"])
+                executed_px = float(status["avg_execution_price"])
 
                 new_executed_amount = executed_amount - self.sell_order.traded_amount
 
@@ -171,19 +169,24 @@ class BitfinexTrader:
 
             print("Position => BuyPos:" + str(self.buy_position) + "|BuyPx:" + str(self.buy_px) + "|SellPos:" + str(self.sell_position) + "|SellPx:" + str(self.sell_px))
 
-        except:
+        except Exception as e:
+            print("Update Order Status Exception: " + str(e))
             pass
 
-    def sqoff(self):
+    def sqoff(self, ticker):
         if(self.net_position() > 0):
-            koinex_pnl = self.get_pnl_koinex()
-            pnl = self.get_pnl()
+            try:
+                koinex_pnl = self.get_pnl_koinex()
+                pnl = self.get_pnl(ticker)
 
-            print("PNL => Bitfinex:" + str(pnl) + "|Koinex:" + str(koinex_pnl))
+                print("PNL => Bitfinex:" + str(pnl) + "|Koinex:" + str(koinex_pnl))
 
-            if((koinex_pnl - pnl) / pnl * 100.0 < 2.0):
-                self.email("Bitfinex Trader Alert: Sqoff in koinex", "Bitfinex Trader Alert: Sqoff in koinex", ["siddharth.garg85@gmail.com"])
-                return True
+                if((koinex_pnl - pnl) / (koinex_pnl + pnl) * 2 * 100.0 < 2.0):
+                    self.email("Bitfinex Trader Alert: Sqoff in koinex", "Bitfinex Trader Alert: Sqoff in koinex", ["siddharth.garg85@gmail.com"])
+                    return True
+            except Exception as e:
+                print("Sqoff Exception: " + str(e))
+                return False
 
         return False
 
@@ -199,18 +202,19 @@ class BitfinexTrader:
         while (self.run):
             time.sleep(self.interval)
 
-            self.update_order_status()
-
             ticker = None
+
             try:
-                ticker = self.client.ticker(self.symbol)
-            except:
+                    ticker = self.client.ticker(self.symbol)
+            except Exception as e:
+                print("Trade Exception: " + str(e))
                 continue
 
+            self.update_order_status()
             self.ema.update(ticker['mid'])
 
             if(self.ema.ready()):
-                if (not self.sqoff()):
+                if (not self.sqoff(ticker)):
                     buy_px, sell_px = self.buy_sell_px()
 
                     bid = ticker['bid']
